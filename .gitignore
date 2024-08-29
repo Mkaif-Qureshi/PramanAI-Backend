@@ -1,2 +1,4 @@
 .env
 /venv
+/spacy_venv
+/en_legal_ner_trf
