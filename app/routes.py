@@ -19,6 +19,10 @@ ner_pipeline = pipeline("token-classification", model="Sidziesama/Legal_NER_Supp
 def home():
     return "Welcome to PramanAI API!"
 
+@main_bp.route('/hello')
+def hello():
+    return "working with hello :)"
+
 @main_bp.route('/api/register', methods=['POST'])
 def register():
     data = request.json
