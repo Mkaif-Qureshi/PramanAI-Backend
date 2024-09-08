@@ -96,31 +96,61 @@ def ocr():
 
 @main_bp.route('/api/ner', methods=['POST'])
 def ner():
-    # Check if 'text' is in the JSON body or if a file is uploaded
-    if request.content_type == 'application/json':
-        # Handle raw text input
+    # Check if 'file' is in the request, otherwise assume raw text
+    if 'file' in request.files:
+        file = request.files['file']
+        lang = request.form.get('lang', 'eng')
+
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+
+        file_ext = file.filename.split('.')[-1].lower()
+
+        # Temporary storage for the uploaded file
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            file.save(temp_file.name)
+
+            if file_ext == 'pdf':
+                try:
+                    # Convert PDF to images and extract text
+                    images = convert_from_path(temp_file.name)
+                    text = ""
+                    for image in images:
+                        text += pytesseract.image_to_string(image, lang=lang)
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+
+            elif file_ext == 'docx':
+                try:
+                    # Extract text from DOCX
+                    doc = docx.Document(temp_file.name)
+                    text = "\n".join([para.text for para in doc.paragraphs])
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+            else:
+                try:
+                    # Extract text from image
+                    image = Image.open(temp_file.name)
+                    text = pytesseract.image_to_string(image, lang=lang)
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+
+        # Clean up temporary file
+        os.remove(temp_file.name)
+
+    elif request.content_type == 'application/json':
+        # Handle raw text input if no file was uploaded
         data = request.json
         text = data.get('text')
         if not text:
             return jsonify({"error": "No text provided"}), 400
-    elif 'file' in request.files:
-        # Handle file input
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
-        
-        try:
-            # Assume the file is a text file
-            text = file.read().decode('utf-8')
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
     else:
         return jsonify({"error": "No data provided"}), 400
 
-    # Process the text with the NER pipeline
+    # Process the extracted text with the NER pipeline
     result = ner_pipeline(text)
-    
-    # Convert float32 to float for JSON serialization
+
+    # Convert the result for JSON serialization
     entities = [
         {"word": entity['word'], "entity": entity['entity'], "score": float(entity['score'])}
         for entity in result
