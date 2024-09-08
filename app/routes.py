@@ -2,10 +2,16 @@ from flask import Blueprint, request, jsonify
 from app.models import User
 from app import db
 from werkzeug.security import generate_password_hash, check_password_hash
-from transformers import pipeline
+from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
 import pytesseract
+from pdf2image import convert_from_path
+import docx
 from PIL import Image
+import tempfile
+import os
 import io
+import torch
+
 
 main_bp = Blueprint('main', __name__)
 
@@ -14,6 +20,8 @@ pytesseract.pytesseract.tesseract_cmd = r'D:\Kaif\Hackathon\Suprem court\Applica
 
 # Initialize the NER pipeline outside of the route to avoid reloading the model each time
 ner_pipeline = pipeline("token-classification", model="Sidziesama/Legal_NER_Support_Model")
+
+
 
 @main_bp.route('/')
 def home():
@@ -47,18 +55,44 @@ def ocr():
         return jsonify({'error': 'No file part'}), 400
 
     file = request.files['file']
-    lang = request.form.get('lang', 'eng')  # Default to English if no language is specified
+    lang = request.form.get('lang', 'eng')
 
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    try:
-        # Handle image files only
-        img = Image.open(io.BytesIO(file.read()))
-        text = pytesseract.image_to_string(img, lang=lang)
-        return jsonify({'text': text}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    file_ext = file.filename.split('.')[-1].lower()
+
+    # Temporary storage for the uploaded file
+    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+        file.save(temp_file.name)
+
+        if file_ext == 'pdf':
+            try:
+                # Convert PDF to images
+                images = convert_from_path(temp_file.name)
+                text = ""
+                for image in images:
+                    text += pytesseract.image_to_string(image, lang=lang)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        elif file_ext == 'docx':
+            try:
+                doc = docx.Document(temp_file.name)
+                text = "\n".join([para.text for para in doc.paragraphs])
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        else:
+            try:
+                image = Image.open(temp_file.name)
+                text = pytesseract.image_to_string(image, lang=lang)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+    # Clean up temporary file
+    os.remove(temp_file.name)
+
+    return jsonify({'text': text})
 
 @main_bp.route('/api/ner', methods=['POST'])
 def ner():
