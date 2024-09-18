@@ -1,6 +1,5 @@
 import os
 
 class Config:
-    SECRET_KEY = os.getenv('SECRET_KEY', 'your_secret_key')
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SECRET_KEY = os.getenv('SECRET_KEY', 'twinkleTwinkleLittleStar')
+    MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/pramanai')

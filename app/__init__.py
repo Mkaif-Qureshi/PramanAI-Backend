@@ -1,23 +1,19 @@
-from flask import Flask, jsonify, request
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
+from flask import Flask, jsonify
+from flask_pymongo import PyMongo
 from dotenv import load_dotenv
 from flask_cors import CORS
 
-db = SQLAlchemy()
-migrate = Migrate()
+mongo = PyMongo()
 
 def create_app():
     app = Flask(__name__)
-    
-    load_dotenv()  # Load environment variables from .env file
-    
+
+    load_dotenv()
+
     app.config.from_object('app.config.Config')
-    
-    db.init_app(app)
-    migrate.init_app(app, db)
-    
-    CORS(app)  # Enable CORS if needed
+
+    mongo.init_app(app)  # Initialize MongoDB
+    CORS(app)
 
     from app.routes import main_bp
     app.register_blueprint(main_bp)

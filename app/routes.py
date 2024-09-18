@@ -1,16 +1,16 @@
-from flask import Blueprint, request, jsonify
-from app.models import User
-from app import db
 from werkzeug.security import generate_password_hash, check_password_hash
-from transformers import pipeline, AutoModelForSeq2SeqLM, AutoTokenizer
-import pytesseract
+from flask import Blueprint, request, jsonify
+from datetime import datetime, timedelta
 from pdf2image import convert_from_path
-import docx
+from transformers import pipeline
+from functools import wraps
 from PIL import Image
+from app import mongo  # MongoDB instance
+import pytesseract
 import tempfile
+import docx
+import jwt
 import os
-import io
-import torch
 
 
 main_bp = Blueprint('main', __name__)
@@ -22,33 +22,81 @@ pytesseract.pytesseract.tesseract_cmd = r'D:\Kaif\Hackathon\Suprem court\Applica
 ner_pipeline = pipeline("token-classification", model="Sidziesama/Legal_NER_Support_Model")
 
 
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            token = request.headers['Authorization'].split(" ")[1]  # Extract token from 'Bearer <token>'
+
+        if not token:
+            return jsonify({'message': 'Token is missing!'}), 403
+
+        try:
+            # Decode the token using your secret key
+            secret_key = "helloworld"
+            data = jwt.decode(token, secret_key, algorithms=['HS256'])
+            current_user = mongo.db.users.find_one({'_id': data['user_id']})
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token has expired!'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Invalid token!'}), 401
+
+        return f(current_user, *args, **kwargs)
+
+    return decorated
 
 @main_bp.route('/')
 def home():
     return "Welcome to PramanAI API!"
 
-@main_bp.route('/hello')
-def hello():
-    return "working with hello :)"
+@main_bp.route('/api/protected', methods=['GET'])
+@token_required
+def protected_route(current_user):
+    return jsonify({'message': 'This is a protected route!', 'user': current_user['username']})
 
 @main_bp.route('/api/register', methods=['POST'])
 def register():
     data = request.json
     username = data['username']
     password = generate_password_hash(data['password'], method='pbkdf2:sha256')
-    new_user = User(username=username, password=password)
-    db.session.add(new_user)
-    db.session.commit()
+    
+    # Check if user already exists
+    existing_user = mongo.db.users.find_one({'username': username})
+    if existing_user:
+        return jsonify({'message': 'Username already exists'}), 400
+
+    # Create new user
+    mongo.db.users.insert_one({'username': username, 'password': password})
     return jsonify({'message': 'User registered successfully!'})
 
 @main_bp.route('/api/login', methods=['POST'])
 def login():
     data = request.json
-    user = User.query.filter_by(username=data['username']).first()
-    if user and check_password_hash(user.password, data['password']):
-        return jsonify({'message': 'Login successful!'})
+    username = data['username']
+    password = data['password']
+    
+    # Find user in MongoDB
+    user = mongo.db.users.find_one({'username': username})
+    
+    if user and check_password_hash(user['password'], password):
+        # Access the SECRET_KEY from the Flask app's config
+        secret_key = "helloworld"
+
+        # Generate JWT token valid for 1 hour
+        token = jwt.encode({
+            'user_id': str(user['_id']),  # Include user information (like id) in the payload
+            'exp': datetime.utcnow() + timedelta(hours=1)  # Token expiry time
+        }, secret_key, algorithm='HS256')
+
+        return jsonify({
+            'message': 'Login successful!',
+            'token': token
+        })
+
     return jsonify({'message': 'Invalid credentials!'}), 401
 
+# Your OCR and NER routes remain unchanged
 @main_bp.route('/api/ocr', methods=['POST'])
 def ocr():
     if 'file' not in request.files:
