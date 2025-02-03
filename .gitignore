@@ -1,4 +1,10 @@
 .env
-/venv
+/venv11
 /spacy_venv
 /en_legal_ner_trf
+/IndicTransToolkit
+/docs
+/app/chroma_db
+/app/chromadb
+test_rag.ipynb
+text.py

@@ -16,7 +16,9 @@ def create_app():
     CORS(app)
 
     from app.routes import main_bp
+    from app.chat import chatbot_bp  
     app.register_blueprint(main_bp)
+    app.register_blueprint(chatbot_bp, url_prefix="/api")
 
     @app.errorhandler(404)
     def not_found_error(error):

@@ -11,9 +11,10 @@ import tempfile
 import docx
 import jwt
 import os
-
+from app.chat import chatbot_bp 
 
 main_bp = Blueprint('main', __name__)
+
 
 # Set the Tesseract executable path
 pytesseract.pytesseract.tesseract_cmd = r'D:\Kaif\Hackathon\Suprem court\Application\Tesseract\tesseract.exe'
@@ -140,7 +141,7 @@ def ocr():
     # Clean up temporary file
     os.remove(temp_file.name)
 
-    return jsonify({'text': text})
+    return jsonify({'OCRtext': text})
 
 @main_bp.route('/api/ner', methods=['POST'])
 def ner():
